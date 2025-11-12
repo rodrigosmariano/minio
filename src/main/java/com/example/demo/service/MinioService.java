@@ -34,32 +34,52 @@ public class MinioService {
 		return fileName;
 	}
 
-	public byte[] downloadFile(String pasta, String fileName) throws Exception {
+	public byte[] downloadFotoHistoricoInterno(String fileName) throws Exception {
 		try (GetObjectResponse response = minioClient
-				.getObject(GetObjectArgs.builder().bucket(pasta).object(fileName).build())) {
+				.getObject(GetObjectArgs.builder().bucket("historico-fotos-internos").object(fileName).build())) {
 			return response.readAllBytes();
 		} catch (Exception e) {
 			return null;
 		}
 	}
 	
-	public List<String> listarArquivosPorPrefixo(String prefixo, String pasta) throws Exception {
-	    List<String> nomesArquivos = new ArrayList<>();
-
-	    Iterable<Result<Item>> resultados = minioClient.listObjects(
-	            ListObjectsArgs.builder()
-	                    .bucket(pasta)
-	                    .prefix(prefixo)
-	                    .recursive(false)
-	                    .build()
-	    );
-
-	    for (Result<Item> resultado : resultados) {
-	        Item item = resultado.get();
-	        nomesArquivos.add(item.objectName());
-	        System.out.println(item.objectName());
-	    }
-
-	    return nomesArquivos;
+	public byte[] downloadFotoPrincipalInterno(String fileName) throws Exception {
+		try (GetObjectResponse response = minioClient
+				.getObject(GetObjectArgs.builder().bucket("fotos-internos").object(fileName).build())) {
+			return response.readAllBytes();
+		} catch (Exception e) {
+			return null;
+		}
 	}
+
+	public String listarFotoPrincipalInterno(Integer idInterno) throws Exception {
+		List<String> nomesArquivos = new ArrayList<>();
+
+		Iterable<Result<Item>> resultados = minioClient.listObjects(
+				ListObjectsArgs.builder().bucket("fotos-internos").prefix(idInterno + ".").recursive(false).build());
+
+		for (Result<Item> resultado : resultados) {
+			Item item = resultado.get();
+			nomesArquivos.add(item.objectName());
+			System.out.println(item.objectName());
+		}
+
+		return nomesArquivos.isEmpty() ? null : nomesArquivos.get(0);
+	}
+
+	public List<String> listarArquivosHistoricoInterno(Integer idInterno) throws Exception {
+		List<String> nomesArquivos = new ArrayList<>();
+
+		Iterable<Result<Item>> resultados = minioClient.listObjects(ListObjectsArgs.builder()
+				.bucket("historico-fotos-internos").prefix(idInterno + "_").recursive(false).build());
+
+		for (Result<Item> resultado : resultados) {
+			Item item = resultado.get();
+			nomesArquivos.add(item.objectName());
+			System.out.println(item.objectName());
+		}
+
+		return nomesArquivos;
+	}
+
 }

@@ -31,19 +31,33 @@ public class ArquivoController {
 		return ResponseEntity.ok("Arquivo enviado: " + nome);
 	}
 
-	@GetMapping("/download/{pasta}/{nome}")
-	public ResponseEntity<byte[]> download(@PathVariable String pasta, @PathVariable String nome) throws Exception {
-		byte[] bytes = minioService.downloadFile(pasta, nome);
+	@GetMapping("/download-foto-historico-interno/{nome}")
+	public ResponseEntity<byte[]> downloadFotoHistoricoInterno(@PathVariable String nome) throws Exception {
+		byte[] bytes = minioService.downloadFotoHistoricoInterno(nome);
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.IMAGE_JPEG); // ou MediaType.IMAGE_PNG conforme o caso
+		return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+	}
+	
+	@GetMapping("/download-foto-principal-interno/{nome}")
+	public ResponseEntity<byte[]> downloadFotoPrincipalInterno(@PathVariable String nome) throws Exception {
+		byte[] bytes = minioService.downloadFotoPrincipalInterno(nome);
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.IMAGE_JPEG); // ou MediaType.IMAGE_PNG conforme o caso
 		return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
 	}
 
-	@GetMapping("/listar/{pasta}/{prefixo}")
-	public ResponseEntity<List<String>> listarArquivosPorPrefixo(@PathVariable String pasta,
-			@PathVariable String prefixo) throws Exception {
-		System.out.println(pasta + "/" + prefixo);
-		List<String> arquivos = minioService.listarArquivosPorPrefixo(prefixo, pasta);
+	@GetMapping("/listar-historico-fotos-interno/{idInterno}")
+	public ResponseEntity<List<String>> listarHistoricoFotosInterno(@PathVariable Integer idInterno) throws Exception {
+		System.out.println(idInterno);
+		List<String> arquivos = minioService.listarArquivosHistoricoInterno(idInterno);
 		return ResponseEntity.ok(arquivos);
+	}
+
+	@GetMapping("/listar-foto-principal-interno/{idInterno}")
+	public ResponseEntity<String> listarFotoPrincipalInterno(@PathVariable Integer idInterno) throws Exception {
+		System.out.println(idInterno);
+		String fileName = minioService.listarFotoPrincipalInterno(idInterno);
+		return ResponseEntity.ok(fileName);
 	}
 }
