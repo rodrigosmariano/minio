@@ -1,55 +1,65 @@
 package com.example.demo.service;
 
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import io.minio.GetObjectArgs;
 import io.minio.GetObjectResponse;
+import io.minio.ListObjectsArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.Result;
+import io.minio.messages.Item;
 
 @Service
 public class MinioService {
 
-    private final MinioClient minioClient;
+	@Autowired
+	private MinioClient minioClient;
 
-    @Value("${minio.bucket}")
-    private String bucketName;
+	public String uploadFile(MultipartFile file, String pasta) throws Exception {
+		String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
 
-    public MinioService(MinioClient minioClient) {
-        this.minioClient = minioClient;
-    }
+		try (InputStream inputStream = file.getInputStream()) {
+			minioClient.putObject(PutObjectArgs.builder().bucket(pasta).object(fileName)
+					.stream(inputStream, file.getSize(), -1).contentType(file.getContentType()).build());
+		}
 
-    public String uploadFile(MultipartFile file) throws Exception {
-        String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
+		return fileName;
+	}
 
-        try (InputStream inputStream = file.getInputStream()) {
-            minioClient.putObject(
-                    PutObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(fileName)
-                            .stream(inputStream, file.getSize(), -1)
-                            .contentType(file.getContentType())
-                            .build()
-            );
-        }
+	public byte[] downloadFile(String pasta, String fileName) throws Exception {
+		try (GetObjectResponse response = minioClient
+				.getObject(GetObjectArgs.builder().bucket(pasta).object(fileName).build())) {
+			return response.readAllBytes();
+		} catch (Exception e) {
+			return null;
+		}
+	}
+	
+	public List<String> listarArquivosPorPrefixo(String prefixo, String pasta) throws Exception {
+	    List<String> nomesArquivos = new ArrayList<>();
 
-        return fileName;
-    }
+	    Iterable<Result<Item>> resultados = minioClient.listObjects(
+	            ListObjectsArgs.builder()
+	                    .bucket(pasta)
+	                    .prefix(prefixo)
+	                    .recursive(false)
+	                    .build()
+	    );
 
-    public byte[] downloadFile(String fileName) throws Exception {
-        try (GetObjectResponse response = minioClient.getObject(
-                GetObjectArgs.builder()
-                        .bucket(bucketName)
-                        .object(fileName)
-                        .build()
-        )) {
-            return response.readAllBytes();
-        }
-    }
+	    for (Result<Item> resultado : resultados) {
+	        Item item = resultado.get();
+	        nomesArquivos.add(item.objectName());
+	        System.out.println(item.objectName());
+	    }
+
+	    return nomesArquivos;
+	}
 }
-
