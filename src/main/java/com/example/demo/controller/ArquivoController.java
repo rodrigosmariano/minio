@@ -30,6 +30,14 @@ public class ArquivoController {
 		String nome = minioService.uploadFile(file, pasta);
 		return ResponseEntity.ok("Arquivo enviado: " + nome);
 	}
+	
+	@PostMapping("/upload-foto-principal")
+	public ResponseEntity<String> uploadFotoPrincipal(MultipartFile file, String idInterno) throws Exception {
+		System.out.println("ID Interno: " + idInterno);
+		String nome = minioService.uploadFotoPrincipal(file, idInterno);
+		System.out.println("Nome do arquivo enviado: " + nome);
+		return ResponseEntity.ok("Arquivo enviado: " + nome);
+	}
 
 	@GetMapping("/download-foto-historico-interno/{nome}")
 	public ResponseEntity<byte[]> downloadFotoHistoricoInterno(@PathVariable String nome) throws Exception {
