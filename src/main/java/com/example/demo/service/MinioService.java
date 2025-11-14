@@ -1,9 +1,24 @@
 package com.example.demo.service;
 
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+
+import javax.imageio.ImageIO;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -20,6 +35,7 @@ import io.minio.RemoveObjectArgs;
 import io.minio.Result;
 import io.minio.StatObjectArgs;
 import io.minio.messages.Item;
+import net.coobird.thumbnailator.Thumbnails;
 
 @Service
 public class MinioService {
@@ -38,86 +54,122 @@ public class MinioService {
 		return fileName;
 	}
 
-	public String uploadFotoPrincipal(MultipartFile file, String idInterno) throws Exception {
+	public String uploadFotoPrincipal(MultipartFile file, String idInterno, String rgi) throws Exception {
 
-	    String fileName = idInterno + ".jpg";
-	    String bucketAtual = "fotos-internos";
-	    String bucketHistorico = "historico-fotos-internos";
+		String fileName = idInterno + ".jpg";
+		String bucketAtual = "fotos-internos";
+		String bucketHistorico = "historico-fotos-internos";
 
-	    // 1. Verificar se existe a foto atual
-	    boolean existe = false;
-	    try {
-	        minioClient.statObject(
-	                StatObjectArgs.builder()
-	                        .bucket(bucketAtual)
-	                        .object(fileName)
-	                        .build()
-	        );
-	        existe = true;
-	    } catch (Exception e) {
-	        existe = false; // não existe, ignorar erro
-	    }
+		// 0. Converte MultipartFile → byte[]
+		byte[] bytesOriginais = file.getBytes();
 
-	    // 2. Se existe → mover para histórico com nome renomeado
-	    if (existe) {
+		// 1. Redimensionar para máximo de 800px
+		byte[] resizedBytes = criaFoto(bytesOriginais, 800);
 
-	        // Nome novo no histórico
-	        String novoNomeHistorico = idInterno + "_" + UUID.randomUUID() + ".jpg";
+		// 2. Aplicar tarja
+		byte[] finalBytes = colocarTarja(resizedBytes, rgi);
 
-	        // COPIAR para o histórico com NOME NOVO
-	        minioClient.copyObject(
-	                CopyObjectArgs.builder()
-	                        .bucket(bucketHistorico)
-	                        .object(novoNomeHistorico)
-	                        .source(
-	                                CopySource.builder()
-	                                        .bucket(bucketAtual)
-	                                        .object(fileName)
-	                                        .build()
-	                        )
-	                        .build()
-	        );
+		// 3. Verificar se existe foto atual
+		boolean existe = false;
+		try {
+			minioClient.statObject(StatObjectArgs.builder().bucket(bucketAtual).object(fileName).build());
+			existe = true;
+		} catch (Exception ignore) {
+		}
 
-	        // DELETAR do bucket atual
-	        minioClient.removeObject(
-	                RemoveObjectArgs.builder()
-	                        .bucket(bucketAtual)
-	                        .object(fileName)
-	                        .build()
-	        );
-	    }
+		// 4. Se existe, mover para histórico com nome aleatório
+		if (existe) {
+			String novoNomeHistorico = idInterno + "_" + new SimpleDateFormat("ddMMyyyHHmmss").format(new Date())
+					+ ".jpg";
 
-	    // 3. Salvar o novo arquivo no bucket fotos-internos
-	    try (InputStream inputStream = file.getInputStream()) {
-	        minioClient.putObject(
-	                PutObjectArgs.builder()
-	                        .bucket(bucketAtual)
-	                        .object(fileName)
-	                        .contentType(file.getContentType())
-	                        .stream(inputStream, file.getSize(), -1)
-	                        .build()
-	        );
-	    }
+			minioClient.copyObject(CopyObjectArgs.builder().bucket(bucketHistorico).object(novoNomeHistorico)
+					.source(CopySource.builder().bucket(bucketAtual).object(fileName).build()).build());
 
-	    return fileName;
+			minioClient.removeObject(RemoveObjectArgs.builder().bucket(bucketAtual).object(fileName).build());
+		}
+
+		// 5. Fazer upload da foto final (JPG com tarja)
+		try (InputStream inputStream = new ByteArrayInputStream(finalBytes)) {
+			minioClient.putObject(PutObjectArgs.builder().bucket(bucketAtual).object(fileName).contentType("image/jpeg")
+					.stream(inputStream, finalBytes.length, -1).build());
+		}
+
+		return fileName;
 	}
 
-	public byte[] downloadFotoHistoricoInterno(String fileName) throws Exception {
+	public byte[] downloadFotoHistoricoInterno(String fileName, String matricula) throws Exception {
 		try (GetObjectResponse response = minioClient
 				.getObject(GetObjectArgs.builder().bucket("historico-fotos-internos").object(fileName).build())) {
-			return response.readAllBytes();
+			return addWatermarkRepeated(response.readAllBytes(), matricula);
 		} catch (Exception e) {
 			return null;
 		}
 	}
 
-	public byte[] downloadFotoPrincipalInterno(String fileName) throws Exception {
+//	$F{ID_INTERNO}!=null?$P{urlImagemInterno}+"?fileName="+$F{ID_INTERNO}+".jpg&matricula="+$P{matricula}:""
+	public byte[] downloadFotoPrincipalInterno(String fileName, String matricula) throws Exception {
+		System.out.println("Download foto principal interno: " + fileName + " / " + matricula);
 		try (GetObjectResponse response = minioClient
 				.getObject(GetObjectArgs.builder().bucket("fotos-internos").object(fileName).build())) {
-			return response.readAllBytes();
+
+			return addWatermarkRepeated(response.readAllBytes(), matricula);
 		} catch (Exception e) {
+			e.printStackTrace();
 			return null;
 		}
+	}
+
+	private byte[] addWatermarkRepeated(byte[] originalBytes, String text) throws IOException {
+
+		BufferedImage original = ImageIO.read(new ByteArrayInputStream(originalBytes));
+
+		int width = original.getWidth();
+		int height = original.getHeight();
+
+		BufferedImage watermarked = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+
+		Graphics2D g2d = watermarked.createGraphics();
+		g2d.drawImage(original, 0, 0, null);
+
+		// 🟦 1) Fonte proporcional ao tamanho da imagem
+		// - imagens pequenas → fonte menor
+		// - imagens grandes → fonte maior
+		int fontSize = Math.max(12, Math.min(width, height) / 20); // variação inteligente
+		g2d.setFont(new Font("Arial", Font.BOLD, fontSize));
+
+		// Cor com transparência
+		g2d.setColor(new Color(0, 0, 0, 35));
+		g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+		FontMetrics fm = g2d.getFontMetrics();
+		int textWidth = fm.stringWidth(text);
+		int textHeight = fm.getHeight();
+
+		// 🟦 2) Rotação diagonal
+		g2d.rotate(Math.toRadians(-35), width / 2.0, height / 2.0);
+
+		// 🟦 3) Espaçamento proporcional
+		// pequenas imagens → espaçamento pequeno
+		// grandes imagens → espaçamento maior
+		int horizontalSpacing = textWidth + (width / 15);
+		int verticalSpacing = textHeight + (height / 15);
+
+		// 🟦 Ajuste mínimo para evitar espaços exagerados
+		horizontalSpacing = Math.max(textWidth + 20, horizontalSpacing);
+		verticalSpacing = Math.max(textHeight + 20, verticalSpacing);
+
+		// 🟦 4) Preenche toda a imagem com o texto repetido
+		for (int y = -height; y < height * 2; y += verticalSpacing) {
+			for (int x = -width; x < width * 2; x += horizontalSpacing) {
+				g2d.drawString(text, x, y);
+			}
+		}
+
+		g2d.dispose();
+
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		ImageIO.write(watermarked, "jpg", baos);
+		return baos.toByteArray();
 	}
 
 	public String listarFotoPrincipalInterno(Integer idInterno) throws Exception {
@@ -148,6 +200,73 @@ public class MinioService {
 		}
 
 		return nomesArquivos;
+	}
+
+	public byte[] criaFoto(byte[] fotoEmBytes, int tamanhoMax) throws IOException {
+
+		BufferedImage image = ImageIO.read(new ByteArrayInputStream(fotoEmBytes));
+
+		// Se já for menor, não precisa redimensionar
+		if (image.getWidth() <= tamanhoMax && image.getHeight() <= tamanhoMax) {
+			return fotoEmBytes;
+		}
+
+		// Redimensionar usando Thumbnailator (mantém proporção)
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+
+		Thumbnails.of(image).size(tamanhoMax, tamanhoMax).outputFormat("jpg").outputQuality(1.0).toOutputStream(baos);
+
+		return baos.toByteArray();
+	}
+
+	public byte[] colocarTarja(byte[] fotoBytes, String rgi) {
+		try {
+			BufferedImage pngImage = ImageIO.read(new ByteArrayInputStream(fotoBytes));
+
+			BufferedImage newImage = new BufferedImage(pngImage.getWidth(), pngImage.getHeight(),
+					BufferedImage.TYPE_INT_RGB);
+
+			Graphics2D g2d = newImage.createGraphics();
+
+			// fundo preto
+			g2d.drawImage(pngImage, 0, 0, Color.BLACK, null);
+
+			// TARJA
+			int tarjaAltura = (int) (newImage.getHeight() * 0.07);
+			g2d.setColor(Color.BLACK);
+			g2d.fillRect(0, newImage.getHeight() - tarjaAltura, newImage.getWidth(), tarjaAltura);
+			g2d.setColor(Color.YELLOW);
+
+			// Texto
+			int fonte = (int) (newImage.getHeight() * 0.045);
+			g2d.setFont(new Font("Arial", Font.BOLD, fonte));
+
+			String texto = "PPDF  Pront. " + rgi + " " + new SimpleDateFormat("dd/MM/yyyy").format(new Date());
+			int x = (int) (newImage.getHeight() * 0.10);
+			int y = newImage.getHeight() - (tarjaAltura / 2) + 8;
+
+			g2d.drawString(texto, x, y);
+
+			// LOGO
+			BufferedImage logo = ImageIO.read(new File("c:/imagens_servidores/BrasaoPoliciaPenalPequeno.png"));
+
+			int logoWidth = (int) (newImage.getHeight() * 0.145);
+			int logoHeight = (int) (newImage.getHeight() * 0.15);
+
+			Image logoRedimensionado = logo.getScaledInstance(logoWidth, logoHeight, Image.SCALE_SMOOTH);
+			g2d.drawImage(logoRedimensionado, x + g2d.getFontMetrics().stringWidth(texto) + 9,
+					newImage.getHeight() - logoHeight, null);
+
+			g2d.dispose();
+
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			ImageIO.write(newImage, "jpg", baos);
+			return baos.toByteArray();
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("Erro ao adicionar tarja à foto.");
+		}
 	}
 
 }
