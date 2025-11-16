@@ -56,6 +56,26 @@ public class MinioService {
 		return fileName;
 	}
 
+	public String uploadFotoSinalParticular(MultipartFile file, String idSinal) throws Exception {
+		String fileName = idSinal + ".jpg";
+
+		try (InputStream inputStream = file.getInputStream()) {
+			minioClient.putObject(PutObjectArgs.builder().bucket("sinais-particulares").object(fileName)
+					.stream(inputStream, file.getSize(), -1).contentType(file.getContentType()).build());
+		}
+		return fileName;
+	}
+
+	public String uploadFotoHistoricoEndereco(MultipartFile file, String idHistoricoEndereco) throws Exception {
+		String fileName = idHistoricoEndereco + ".jpg";
+
+		try (InputStream inputStream = file.getInputStream()) {
+			minioClient.putObject(PutObjectArgs.builder().bucket("historico-endereco-interno").object(fileName)
+					.stream(inputStream, file.getSize(), -1).contentType(file.getContentType()).build());
+		}
+		return fileName;
+	}
+
 	public String uploadFotoPrincipal(MultipartFile file, String idInterno, String rgi) throws Exception {
 
 		String fileName = idInterno + ".jpg";
@@ -101,6 +121,18 @@ public class MinioService {
 
 	public byte[] downloadFotoHistoricoInterno(String fileName, String matricula) throws Exception {
 		return addWatermarkRepeated(getFile(fileName, "historico-fotos-internos"), matricula);
+	}
+	
+	public byte[] downloadFotoHistoricoEndereco(String fileName, String matricula) throws Exception {
+		return addWatermarkRepeated(getFile(fileName, "historico-endereco-interno"), matricula);
+	}
+
+	public byte[] downloadFotoSinaisParticulares(String fileName, String matricula) throws Exception {
+		return addWatermarkRepeated(getFile(fileName, "sinais-particulares"), matricula);
+	}
+
+	public byte[] downloadFotoPerfil(String fileName, String matricula) throws Exception {
+		return addWatermarkRepeated(getFile(fileName, "foto-perfil"), matricula);
 	}
 
 	public byte[] downloadFotoPrincipalInterno(String fileName, String matricula) throws Exception {

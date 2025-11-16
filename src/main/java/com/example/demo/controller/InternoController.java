@@ -16,12 +16,12 @@ import org.springframework.web.multipart.MultipartFile;
 import com.example.demo.service.MinioService;
 
 @RestController
-@RequestMapping("/arquivos")
-public class ArquivoController {
+@RequestMapping("/interno")
+public class InternoController {
 
 	private final MinioService minioService;
 
-	public ArquivoController(MinioService minioService) {
+	public InternoController(MinioService minioService) {
 		this.minioService = minioService;
 	}
 
@@ -38,9 +38,45 @@ public class ArquivoController {
 		return ResponseEntity.ok("Arquivo enviado: " + nome);
 	}
 
+	@PostMapping("/upload-foto-sinais-particulares")
+	public ResponseEntity<String> uploadFotoSinaisParticulares(MultipartFile file, String idSinal) throws Exception {
+		String nome = minioService.uploadFotoSinalParticular(file, idSinal);
+		return ResponseEntity.ok("Arquivo enviado: " + nome);
+	}
+	
+	@PostMapping("/upload-foto-historico-endereco")
+	public ResponseEntity<String> uploadFotoHistoricoEndereco(MultipartFile file, String idHistoricoEndereco) throws Exception {
+		String nome = minioService.uploadFotoHistoricoEndereco(file, idHistoricoEndereco);
+		return ResponseEntity.ok("Arquivo enviado: " + nome);
+	}
+	
+	@GetMapping("/download-foto-sinais-particulares")
+	public ResponseEntity<byte[]> downloadFotoSinaisParticulares(String fileName, String matricula) throws Exception {
+		byte[] bytes = minioService.downloadFotoSinaisParticulares(fileName, matricula);
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.IMAGE_JPEG); // ou MediaType.IMAGE_PNG conforme o caso
+		return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+	}
+	
+	@GetMapping("/download-foto-perfil")
+	public ResponseEntity<byte[]> downloadFotoPerfil(String fileName, String matricula) throws Exception {
+		byte[] bytes = minioService.downloadFotoPerfil(fileName, matricula);
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.IMAGE_JPEG); // ou MediaType.IMAGE_PNG conforme o caso
+		return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+	}
+
 	@GetMapping("/download-foto-historico-interno")
 	public ResponseEntity<byte[]> downloadFotoHistoricoInterno(String fileName, String matricula) throws Exception {
 		byte[] bytes = minioService.downloadFotoHistoricoInterno(fileName, matricula);
+		HttpHeaders headers = new HttpHeaders();
+		headers.setContentType(MediaType.IMAGE_JPEG); // ou MediaType.IMAGE_PNG conforme o caso
+		return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
+	}
+	
+	@GetMapping("/download-foto-historico-endereco")
+	public ResponseEntity<byte[]> downloadFotoHistoricoEndereco(String fileName, String matricula) throws Exception {
+		byte[] bytes = minioService.downloadFotoHistoricoEndereco(fileName, matricula);
 		HttpHeaders headers = new HttpHeaders();
 		headers.setContentType(MediaType.IMAGE_JPEG); // ou MediaType.IMAGE_PNG conforme o caso
 		return new ResponseEntity<>(bytes, headers, HttpStatus.OK);
