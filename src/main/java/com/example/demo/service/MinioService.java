@@ -9,15 +9,17 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 
+import javax.crypto.Cipher;
+import javax.crypto.spec.SecretKeySpec;
 import javax.imageio.ImageIO;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -98,28 +100,31 @@ public class MinioService {
 	}
 
 	public byte[] downloadFotoHistoricoInterno(String fileName, String matricula) throws Exception {
-		try (GetObjectResponse response = minioClient
-				.getObject(GetObjectArgs.builder().bucket("historico-fotos-internos").object(fileName).build())) {
-			return addWatermarkRepeated(response.readAllBytes(), matricula);
-		} catch (Exception e) {
-			return null;
-		}
+		return addWatermarkRepeated(getFile(fileName, "historico-fotos-internos"), matricula);
 	}
 
-//	$F{ID_INTERNO}!=null?$P{urlImagemInterno}+"?fileName="+$F{ID_INTERNO}+".jpg&matricula="+$P{matricula}:""
 	public byte[] downloadFotoPrincipalInterno(String fileName, String matricula) throws Exception {
-		System.out.println("Download foto principal interno: " + fileName + " / " + matricula);
-		try (GetObjectResponse response = minioClient
-				.getObject(GetObjectArgs.builder().bucket("fotos-internos").object(fileName).build())) {
+		return addWatermarkRepeated(getFile(fileName, "fotos-internos"), matricula);
+	}
 
-			return addWatermarkRepeated(response.readAllBytes(), matricula);
+	public static String decrypt(String encrypted) {
+		try {
+			String KEY = "1234567890123456";
+			Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
+			cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(KEY.getBytes(), "AES"));
+			byte[] decoded = Base64.getUrlDecoder().decode(encrypted);
+			return new String(cipher.doFinal(decoded));
 		} catch (Exception e) {
-			e.printStackTrace();
 			return null;
 		}
 	}
 
 	private byte[] addWatermarkRepeated(byte[] originalBytes, String text) throws IOException {
+		text = decrypt(text);
+
+		if (originalBytes == null || text == null || text.isEmpty()) {
+			return null;
+		}
 
 		BufferedImage original = ImageIO.read(new ByteArrayInputStream(originalBytes));
 
@@ -161,7 +166,7 @@ public class MinioService {
 		// 🟦 4) Preenche toda a imagem com o texto repetido
 		for (int y = -height; y < height * 2; y += verticalSpacing) {
 			for (int x = -width; x < width * 2; x += horizontalSpacing) {
-				g2d.drawString(text, x, y);
+				g2d.drawString(text, x + y, y);
 			}
 		}
 
@@ -202,7 +207,16 @@ public class MinioService {
 		return nomesArquivos;
 	}
 
-	public byte[] criaFoto(byte[] fotoEmBytes, int tamanhoMax) throws IOException {
+	private byte[] getFile(String fileName, String bucket) throws Exception {
+		try (GetObjectResponse response = minioClient
+				.getObject(GetObjectArgs.builder().bucket(bucket).object(fileName).build())) {
+			return response.readAllBytes();
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	private byte[] criaFoto(byte[] fotoEmBytes, int tamanhoMax) throws IOException {
 
 		BufferedImage image = ImageIO.read(new ByteArrayInputStream(fotoEmBytes));
 
@@ -248,7 +262,9 @@ public class MinioService {
 			g2d.drawString(texto, x, y);
 
 			// LOGO
-			BufferedImage logo = ImageIO.read(new File("c:/imagens_servidores/BrasaoPoliciaPenalPequeno.png"));
+//			BufferedImage logo = ImageIO.read(new File("c:/imagens_servidores/BrasaoPoliciaPenalPequeno.png"));
+			byte[] bytes = getFile("BrasaoPoliciaPenalPequeno.png", "sistema");
+			BufferedImage logo = ImageIO.read(new ByteArrayInputStream(bytes));
 
 			int logoWidth = (int) (newImage.getHeight() * 0.145);
 			int logoHeight = (int) (newImage.getHeight() * 0.15);
