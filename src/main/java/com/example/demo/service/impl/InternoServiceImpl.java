@@ -1,4 +1,4 @@
-package com.example.demo.service;
+package com.example.demo.service.impl;
 
 import java.awt.Color;
 import java.awt.Font;
@@ -26,6 +26,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.example.demo.properties.BucketProperties;
+import com.example.demo.service.InternoService;
+
 import io.minio.CopyObjectArgs;
 import io.minio.CopySource;
 import io.minio.GetObjectArgs;
@@ -40,11 +43,15 @@ import io.minio.messages.Item;
 import net.coobird.thumbnailator.Thumbnails;
 
 @Service
-public class MinioService {
+public class InternoServiceImpl implements InternoService {
 
 	@Autowired
 	private MinioClient minioClient;
 
+	@Autowired
+	private BucketProperties buckets;
+
+	@Override
 	public String uploadFile(MultipartFile file, String pasta) throws Exception {
 		String fileName = UUID.randomUUID() + "_" + file.getOriginalFilename();
 
@@ -56,31 +63,36 @@ public class MinioService {
 		return fileName;
 	}
 
+	@Override
 	public String uploadFotoSinalParticular(MultipartFile file, String idSinal) throws Exception {
 		String fileName = idSinal + ".jpg";
 
 		try (InputStream inputStream = file.getInputStream()) {
-			minioClient.putObject(PutObjectArgs.builder().bucket("sinais-particulares").object(fileName)
-					.stream(inputStream, file.getSize(), -1).contentType(file.getContentType()).build());
+			minioClient.putObject(
+					PutObjectArgs.builder().bucket(buckets.getInterno().getFoto().getSinais()).object(fileName)
+							.stream(inputStream, file.getSize(), -1).contentType(file.getContentType()).build());
 		}
 		return fileName;
 	}
 
+	@Override
 	public String uploadFotoHistoricoEndereco(MultipartFile file, String idHistoricoEndereco) throws Exception {
 		String fileName = idHistoricoEndereco + ".jpg";
 
 		try (InputStream inputStream = file.getInputStream()) {
-			minioClient.putObject(PutObjectArgs.builder().bucket("historico-endereco-interno").object(fileName)
-					.stream(inputStream, file.getSize(), -1).contentType(file.getContentType()).build());
+			minioClient.putObject(
+					PutObjectArgs.builder().bucket(buckets.getInterno().getFoto().getEndereco()).object(fileName)
+							.stream(inputStream, file.getSize(), -1).contentType(file.getContentType()).build());
 		}
 		return fileName;
 	}
 
+	@Override
 	public String uploadFotoPrincipal(MultipartFile file, String idInterno, String rgi) throws Exception {
 
 		String fileName = idInterno + ".jpg";
-		String bucketAtual = "fotos-internos";
-		String bucketHistorico = "historico-fotos-internos";
+		String bucketAtual = buckets.getInterno().getFoto().getPrincipal();
+		String bucketHistorico = buckets.getInterno().getFoto().getHistorico();
 
 		// 0. Converte MultipartFile → byte[]
 		byte[] bytesOriginais = file.getBytes();
@@ -119,27 +131,66 @@ public class MinioService {
 		return fileName;
 	}
 
+	@Override
 	public byte[] downloadFotoHistoricoInterno(String fileName, String matricula) throws Exception {
-		return addWatermarkRepeated(getFile(fileName, "historico-fotos-internos"), matricula);
+		return addWatermarkRepeated(getFile(fileName, buckets.getInterno().getFoto().getHistorico()), matricula);
 	}
-	
+
+	@Override
 	public byte[] downloadFotoHistoricoEndereco(String fileName, String matricula) throws Exception {
-		return addWatermarkRepeated(getFile(fileName, "historico-endereco-interno"), matricula);
+		return addWatermarkRepeated(getFile(fileName, buckets.getInterno().getFoto().getEndereco()), matricula);
 	}
 
+	@Override
 	public byte[] downloadFotoSinaisParticulares(String fileName, String matricula) throws Exception {
-		return addWatermarkRepeated(getFile(fileName, "sinais-particulares"), matricula);
+		return addWatermarkRepeated(getFile(fileName, buckets.getInterno().getFoto().getSinais()), matricula);
 	}
 
+	@Override
 	public byte[] downloadFotoPerfil(String fileName, String matricula) throws Exception {
-		return addWatermarkRepeated(getFile(fileName, "foto-perfil"), matricula);
+		return addWatermarkRepeated(getFile(fileName, buckets.getInterno().getFoto().getPerfil()), matricula);
 	}
 
+	@Override
 	public byte[] downloadFotoPrincipalInterno(String fileName, String matricula) throws Exception {
-		return addWatermarkRepeated(getFile(fileName, "fotos-internos"), matricula);
+		return addWatermarkRepeated(getFile(fileName, buckets.getInterno().getFoto().getPrincipal()), matricula);
 	}
 
-	public static String decrypt(String encrypted) {
+	@Override
+	public String listarFotoPrincipalInterno(Integer idInterno) throws Exception {
+		List<String> nomesArquivos = new ArrayList<>();
+
+		Iterable<Result<Item>> resultados = minioClient
+				.listObjects(ListObjectsArgs.builder().bucket(buckets.getInterno().getFoto().getPrincipal())
+						.prefix(idInterno + ".").recursive(false).build());
+
+		for (Result<Item> resultado : resultados) {
+			Item item = resultado.get();
+			nomesArquivos.add(item.objectName());
+			System.out.println(item.objectName());
+		}
+
+		return nomesArquivos.isEmpty() ? null : nomesArquivos.get(0);
+	}
+
+	@Override
+	public List<String> listarArquivosHistoricoInterno(Integer idInterno) throws Exception {
+		List<String> nomesArquivos = new ArrayList<>();
+
+		Iterable<Result<Item>> resultados = minioClient
+				.listObjects(ListObjectsArgs.builder().bucket(buckets.getInterno().getFoto().getHistorico())
+						.prefix(idInterno + "_").recursive(false).build());
+
+		for (Result<Item> resultado : resultados) {
+			Item item = resultado.get();
+			nomesArquivos.add(item.objectName());
+			System.out.println(item.objectName());
+		}
+
+		return nomesArquivos;
+	}
+
+	private static String decrypt(String encrypted) {
 		try {
 			String KEY = "1234567890123456";
 			Cipher cipher = Cipher.getInstance("AES/ECB/PKCS5Padding");
@@ -209,36 +260,6 @@ public class MinioService {
 		return baos.toByteArray();
 	}
 
-	public String listarFotoPrincipalInterno(Integer idInterno) throws Exception {
-		List<String> nomesArquivos = new ArrayList<>();
-
-		Iterable<Result<Item>> resultados = minioClient.listObjects(
-				ListObjectsArgs.builder().bucket("fotos-internos").prefix(idInterno + ".").recursive(false).build());
-
-		for (Result<Item> resultado : resultados) {
-			Item item = resultado.get();
-			nomesArquivos.add(item.objectName());
-			System.out.println(item.objectName());
-		}
-
-		return nomesArquivos.isEmpty() ? null : nomesArquivos.get(0);
-	}
-
-	public List<String> listarArquivosHistoricoInterno(Integer idInterno) throws Exception {
-		List<String> nomesArquivos = new ArrayList<>();
-
-		Iterable<Result<Item>> resultados = minioClient.listObjects(ListObjectsArgs.builder()
-				.bucket("historico-fotos-internos").prefix(idInterno + "_").recursive(false).build());
-
-		for (Result<Item> resultado : resultados) {
-			Item item = resultado.get();
-			nomesArquivos.add(item.objectName());
-			System.out.println(item.objectName());
-		}
-
-		return nomesArquivos;
-	}
-
 	private byte[] getFile(String fileName, String bucket) throws Exception {
 		try (GetObjectResponse response = minioClient
 				.getObject(GetObjectArgs.builder().bucket(bucket).object(fileName).build())) {
@@ -265,7 +286,7 @@ public class MinioService {
 		return baos.toByteArray();
 	}
 
-	public byte[] colocarTarja(byte[] fotoBytes, String rgi) {
+	private byte[] colocarTarja(byte[] fotoBytes, String rgi) {
 		try {
 			BufferedImage pngImage = ImageIO.read(new ByteArrayInputStream(fotoBytes));
 
@@ -294,7 +315,6 @@ public class MinioService {
 			g2d.drawString(texto, x, y);
 
 			// LOGO
-//			BufferedImage logo = ImageIO.read(new File("c:/imagens_servidores/BrasaoPoliciaPenalPequeno.png"));
 			byte[] bytes = getFile("BrasaoPoliciaPenalPequeno.png", "sistema");
 			BufferedImage logo = ImageIO.read(new ByteArrayInputStream(bytes));
 
