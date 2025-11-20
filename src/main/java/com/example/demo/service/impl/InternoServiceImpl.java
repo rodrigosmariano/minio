@@ -265,6 +265,7 @@ public class InternoServiceImpl implements InternoService {
 				.getObject(GetObjectArgs.builder().bucket(bucket).object(fileName).build())) {
 			return response.readAllBytes();
 		} catch (Exception e) {
+			e.printStackTrace();
 			return null;
 		}
 	}
