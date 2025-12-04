@@ -28,4 +28,6 @@ public interface InternoService {
 
 	List<String> listarArquivosHistoricoInterno(Integer idInterno) throws Exception;
 
+	byte[] downloadFotoPrincipalInternoForagidos(String fileName) throws Exception;
+
 }

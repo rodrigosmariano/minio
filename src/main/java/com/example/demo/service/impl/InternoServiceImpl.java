@@ -9,6 +9,7 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
@@ -157,6 +158,17 @@ public class InternoServiceImpl implements InternoService {
 	}
 
 	@Override
+	public byte[] downloadFotoPrincipalInternoForagidos(String fileName) throws Exception {
+		byte[] arquivo = getFile(fileName, buckets.getInterno().getFoto().getPrincipal());
+
+	    if (arquivo != null) {
+	        return arquivo;
+	    }
+
+	    return carregarImagemPadrao();
+	}
+
+	@Override
 	public String listarFotoPrincipalInterno(Integer idInterno) throws Exception {
 		List<String> nomesArquivos = new ArrayList<>();
 
@@ -188,6 +200,15 @@ public class InternoServiceImpl implements InternoService {
 		}
 
 		return nomesArquivos;
+	}
+
+	private byte[] carregarImagemPadrao() throws IOException {
+		try (InputStream is = getClass().getResourceAsStream("/static/img/policiapenal.png")) {
+			if (is == null) {
+				System.err.println("Imagem padrão não encontrada no classpath!");
+			}
+			return is.readAllBytes();
+		}
 	}
 
 	private static String decrypt(String encrypted) {

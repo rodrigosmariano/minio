@@ -73,6 +73,11 @@ public class InternoController {
 		return buildImageResponse(internoService.downloadFotoPrincipalInterno(fileName, matricula));
 	}
 
+	@GetMapping("/download-foto-principal-interno-foragidos")
+	public ResponseEntity<byte[]> downloadFotoPrincipalInternoForagidos(String fileName) throws Exception {
+		return buildImageResponse(internoService.downloadFotoPrincipalInternoForagidos(fileName));
+	}
+
 	@GetMapping("/listar-historico-fotos-interno/{idInterno}")
 	public ResponseEntity<List<String>> listarHistoricoFotosInterno(@PathVariable Integer idInterno) throws Exception {
 		return ResponseEntity.ok(internoService.listarArquivosHistoricoInterno(idInterno));
